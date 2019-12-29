@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"image"
-	"io"
 	"log"
+	"math/rand"
 	"net"
+	"time"
 
 	"image/color"
 
@@ -23,8 +23,8 @@ const (
 )
 
 type myPixel struct {
-	x, y  int
-	color uint
+	x, y       int
+	r, g, b, a uint8
 }
 
 func run() {
@@ -43,57 +43,67 @@ func run() {
 		image.Point{width, height},
 	})
 
-	var conns []net.Conn
-
-	for i := 0; i < numConns; i++ {
-		conn, err := net.Dial("tcp", serverBühne)
-		if err != nil {
-			log.Fatalf("dial: %v", err)
-		}
-		log.Printf("connection %d established\n", i)
-		conns = append(conns, conn)
-	}
-
-	go func() {
-		for x := 0; x < width; x++ {
-			for y := 0; y < height; y++ {
-				fmt.Fprintf(conns[y%numConns], "PX %d %d\n", x, y)
-			}
-		}
-		log.Println("requested all pixels")
-	}()
-
 	pixelChan := make(chan *myPixel)
-
 	for i := 0; i < numConns; i++ {
-		go func(conn net.Conn) {
-			reader := bufio.NewReader(conn)
+		go func() {
 			for {
-				line, err := reader.ReadString('\n')
-				if err == io.EOF {
-					log.Fatalf("read: %v", err)
-				}
-
-				var x, y int
-				var c uint
-				_, err = fmt.Sscanf(line, "PX %d %d %06x", &x, &y, &c)
+				conn, err := net.Dial("tcp", serverBühne)
 				if err != nil {
-					log.Printf("unable to parse `%s`: %v", line, err)
+					log.Printf("dial: %v", err)
+					time.Sleep(50 * time.Millisecond)
+					continue
 				}
+				line := make([]byte, 2048)
+				for {
+					foo := ""
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
+					foo = foo + fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))
 
-				pixelChan <- &myPixel{x, y, c}
+					_, _ = conn.Write([]byte(foo))
+					if err != nil {
+						log.Printf("write: %v", err)
+						conn.Close()
+						break
+					}
+					_, err = conn.Read(line)
+					if err != nil {
+						log.Printf("unable to read: %v", err)
+					}
+
+					px := myPixel{}
+					_, err = fmt.Sscanf(string(line),
+						"PX %d %d %02x%02x%02x%02x",
+						&px.x, &px.y,
+						&px.r, &px.g, &px.b, &px.a)
+					if err != nil {
+						log.Printf("unable to parse `%s`: %v", line, err)
+					}
+					pixelChan <- &px
+				}
 			}
-		}(conns[i])
+		}()
 	}
 
 	for !win.Closed() {
 		for i := 0; i < 10; i++ {
 			px := <-pixelChan
-			r := uint8(px.color & (0xFF << 3 * 8))
-			g := uint8(px.color & (0xFF << 2 * 8))
-			b := uint8(px.color & (0xFF << 1 * 8))
-			a := uint8(px.color & (0xFF << 0 * 8))
-			img.Set(px.x, px.y, color.RGBA{r, g, b, a})
+			img.Set(px.x, px.y, color.RGBA{px.r, px.g, px.b, px.a})
 		}
 
 		// update window with current pixels
