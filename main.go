@@ -51,7 +51,7 @@ func run() {
 	// Randomize so that the image builds up quicker
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(queue), func(i, j int) { queue[i], queue[j] = queue[j], queue[i] })
-	queueLen := uint64(len(queue))
+	queueLen := uint64(len(queue)) - 2*numConns
 
 	// Create our canvas
 	win, err := pixelgl.NewWindow(pixelgl.WindowConfig{
@@ -104,8 +104,8 @@ func run() {
 				for {
 					readNext := atomic.AddUint64(&currentPixel, 1) - 1 // Increase first and get the previous pixel position
 					currentPixel = currentPixel % queueLen             // Synchronization yolo
-
-					_, _ = conn.Write([]byte(fmt.Sprintf("PX %d %d\n", queue[readNext].x, queue[readNext].y)))
+					cmd := fmt.Sprintf("PX %d %d\n", queue[readNext].x, queue[readNext].y)
+					_, _ = conn.Write([]byte(cmd))
 					if err != nil {
 						log.Printf("write: %v", err)
 						conn.Close()
