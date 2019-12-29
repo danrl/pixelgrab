@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"image"
+	"io"
+	"log"
+	"net"
 
 	"image/color"
 
@@ -10,9 +15,17 @@ import (
 )
 
 const (
-	width  = 1920
-	height = 1080
+	width       = 1920 / 10
+	height      = 1080 / 10
+	numConns    = 4
+	serverWand  = "151.217.111.34:1234"
+	serverBühne = "151.217.176.193:1234"
 )
+
+type myPixel struct {
+	x, y  int
+	color uint
+}
 
 func run() {
 	win, err := pixelgl.NewWindow(pixelgl.WindowConfig{
@@ -30,11 +43,58 @@ func run() {
 		image.Point{width, height},
 	})
 
-	for !win.Closed() {
+	var conns []net.Conn
 
-		// code from michi
-		// for each pixel
-		img.Set(10, 30, color.White) // example
+	for i := 0; i < numConns; i++ {
+		conn, err := net.Dial("tcp", serverBühne)
+		if err != nil {
+			log.Fatalf("dial: %v", err)
+		}
+		log.Printf("connection %d established\n", i)
+		conns = append(conns, conn)
+	}
+
+	go func() {
+		for x := 0; x < width; x++ {
+			for y := 0; y < height; y++ {
+				fmt.Fprintf(conns[y%numConns], "PX %d %d\n", x, y)
+			}
+		}
+		log.Println("requested all pixels")
+	}()
+
+	pixelChan := make(chan *myPixel)
+
+	for i := 0; i < numConns; i++ {
+		go func(conn net.Conn) {
+			reader := bufio.NewReader(conn)
+			for {
+				line, err := reader.ReadString('\n')
+				if err == io.EOF {
+					log.Fatalf("read: %v", err)
+				}
+
+				var x, y int
+				var c uint
+				_, err = fmt.Sscanf(line, "PX %d %d %06x", &x, &y, &c)
+				if err != nil {
+					log.Printf("unable to parse `%s`: %v", line, err)
+				}
+
+				pixelChan <- &myPixel{x, y, c}
+			}
+		}(conns[i])
+	}
+
+	for !win.Closed() {
+		for i := 0; i < 10; i++ {
+			px := <-pixelChan
+			r := uint8(px.color & (0xFF << 3 * 8))
+			g := uint8(px.color & (0xFF << 2 * 8))
+			b := uint8(px.color & (0xFF << 1 * 8))
+			a := uint8(px.color & (0xFF << 0 * 8))
+			img.Set(px.x, px.y, color.RGBA{r, g, b, a})
+		}
 
 		// update window with current pixels
 		pic := pixel.PictureDataFromImage(img)
