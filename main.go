@@ -18,7 +18,7 @@ import (
 const (
 	width               = 4096
 	height              = 768
-	scale       float64 = 0.25
+	scale       float64 = 0.5 // Use 0.25 or 0.5
 	numConns            = 4
 	serverWand          = "151.217.111.34:1234"
 	serverBühne         = "151.217.176.193:1234" // 4096x768
