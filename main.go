@@ -17,7 +17,7 @@ import (
 const (
 	width       = 2048 // actual 4096 but doesn't fit my laptop's screen
 	height      = 768
-	numConns    = 4
+	numConns    = 1
 	serverWand  = "151.217.111.34:1234"
 	serverBühne = "151.217.176.193:1234" // 4096x768
 )
@@ -53,6 +53,26 @@ func run() {
 					time.Sleep(200 * time.Millisecond) // give me a break :)
 					continue
 				}
+				go func() {
+					defer conn.Close()
+					scanner := bufio.NewScanner(conn)
+					for scanner.Scan() {
+						line := scanner.Text()
+						px := myPixel{}
+						_, err = fmt.Sscanf(line,
+							"PX %d %d %02x%02x%02x%02x",
+							&px.x, &px.y,
+							&px.r, &px.g, &px.b, &px.a)
+						if err != nil {
+							log.Printf("unable to parse `%s`: %v", line, err)
+						}
+						img.Set(px.x, px.y, color.RGBA{px.r, px.g, px.b, px.a})
+					}
+					if err := scanner.Err(); err != nil {
+						log.Printf("scan error: %v", err)
+						return
+					}
+				}()
 				for {
 					_, _ = conn.Write([]byte(fmt.Sprintf("PX %d %d\n", rand.Int31n(width), rand.Int31n(height))))
 					if err != nil {
@@ -60,26 +80,7 @@ func run() {
 						conn.Close()
 						break
 					}
-					go func() {
-						defer conn.Close()
-						scanner := bufio.NewScanner(conn)
-						for scanner.Scan() {
-							line := scanner.Text()
-							px := myPixel{}
-							_, err = fmt.Sscanf(line,
-								"PX %d %d %02x%02x%02x%02x",
-								&px.x, &px.y,
-								&px.r, &px.g, &px.b, &px.a)
-							if err != nil {
-								log.Printf("unable to parse `%s`: %v", line, err)
-							}
-							img.Set(px.x, px.y, color.RGBA{px.r, px.g, px.b, px.a})
-						}
-						if err := scanner.Err(); err != nil {
-							log.Printf("scan error: %v", err)
-							return
-						}
-					}()
+
 				}
 			}
 		}()
